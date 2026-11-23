@@ -9,6 +9,8 @@ orderbook_module = import_module("03_get_orderbook")
 spread_module = import_module("04_calculate_spread")
 live_module = import_module("05_live_prices")
 currency_module = import_module("06_currency_conversion")
+connection_module = import_module("01_test_connection")
+orders_module = import_module("orders")
 
 
 def format_eur(value):
@@ -22,15 +24,14 @@ def format_eur(value):
     )
 
 
-def show_orderbook(market_id):
+def show_orderbook(market):
     """
     Pridobi order book in prikaže cene ter spread v EUR.
     """
 
-    orderbook = orderbook_module.get_orderbook(
-        market_id,
-        limit=10
-    )
+    market_id = market["market_id"]
+    quote_currency = markets_module.get_quote_currency(market)
+    orderbook = orderbook_module.get_orderbook(market_id, limit=10)
 
     asks = orderbook["asks"]
     bids = orderbook["bids"]
@@ -42,36 +43,41 @@ def show_orderbook(market_id):
     # Izračun najboljših cen in spreada v izvorni valuti.
     result = spread_module.calculate_spread(asks, bids)
 
-    # Pridobimo aktualni menjalni tečaj USD/EUR.
-    rate = currency_module.get_usd_to_eur_rate()
-
-    # Pretvorimo najboljši prodajni in nakupni tečaj.
-    best_ask_eur = format_eur(result["best_ask"] * rate)
-    best_bid_eur = format_eur(result["best_bid"] * rate)
-
-    # Spread pretvorimo iz USD v EUR.
-    spread_eur = format_eur(
-        (result["best_ask"] - result["best_bid"]) * rate
-    )
-
     print()
     print("=== POVZETEK TRGA ===")
-    print(f"Menjalni tečaj:       1 USD = {rate:.6f} EUR")
-    print(f"Najboljša prodajna:   {best_ask_eur:.2f} EUR")
-    print(f"Najboljša nakupna:    {best_bid_eur:.2f} EUR")
-    print(f"Spread:               {spread_eur:.2f} EUR")
+    print(f"Kotacijska valuta:    {quote_currency}")
+
+    if quote_currency == "USD":
+        rate = currency_module.get_usd_to_eur_rate()
+        best_ask = format_eur(result["best_ask"] * rate)
+        best_bid = format_eur(result["best_bid"] * rate)
+        spread = format_eur((result["best_ask"] - result["best_bid"]) * rate)
+        print(f"Menjalni tečaj:       1 USD = {rate:.6f} EUR")
+        print(f"Najboljša prodajna:   {best_ask:.2f} EUR")
+        print(f"Najboljša nakupna:    {best_bid:.2f} EUR")
+        print(f"Spread:               {spread:.2f} EUR")
+    else:
+        print("EUR pretvorba je na voljo samo za USD trge.")
+        print(f"Najboljša prodajna:   {result['best_ask']} {quote_currency}")
+        print(f"Najboljša nakupna:    {result['best_bid']} {quote_currency}")
+        print(f"Spread:               {result['spread']} {quote_currency}")
+
     print(f"Spread (%):           {result['spread_percent']:.6f}%")
 
     print()
     print("=== PRODAJNA NAROČILA (ASKS) ===")
 
     for order in asks:
-        price_eur = format_eur(
-            Decimal(str(order["price"])) * rate
-        )
+        if quote_currency == "USD":
+            rate = currency_module.get_usd_to_eur_rate()
+            price = format_eur(Decimal(str(order["price"])) * rate)
+            currency = "EUR"
+        else:
+            price = order["price"]
+            currency = quote_currency
 
         print(
-            f"Cena: {price_eur:.2f} EUR | "
+            f"Cena: {price} {currency} | "
             f"Količina: {order['remaining_base_amount']}"
         )
 
@@ -79,69 +85,72 @@ def show_orderbook(market_id):
     print("=== NAKUPNA NAROČILA (BIDS) ===")
 
     for order in bids:
-        price_eur = format_eur(
-            Decimal(str(order["price"])) * rate
-        )
+        if quote_currency == "USD":
+            rate = currency_module.get_usd_to_eur_rate()
+            price = format_eur(Decimal(str(order["price"])) * rate)
+            currency = "EUR"
+        else:
+            price = order["price"]
+            currency = quote_currency
 
         print(
-            f"Cena: {price_eur:.2f} EUR | "
+            f"Cena: {price} {currency} | "
             f"Količina: {order['remaining_base_amount']}"
         )
 
 
 def main():
-    print("=== LIGHTER ORDER BOOK ===")
-    print()
-
-    symbol = input(
-        "Vnesi trg (npr. BTC ali DOT): "
-    ).strip().upper()
-
-    try:
-        market = markets_module.find_market(symbol)
-
-        if market is None:
-            print(f"Trg {symbol} ni bil najden.")
-            return
-
-        market_id = market["market_id"]
-
-        print()
-        print("Izbrani trg:", market["symbol"])
-        print("Market ID:", market_id)
-
-        print()
+    while True:
+        print("\n=== DECENTRALIZIRANA BORZA LIGHTER ===")
         print("Izberi način delovanja:")
-        print("1 - Enkratni prikaz order booka v EUR")
-        print("2 - Spremljanje cen v živo")
+        print("1 - Preveri povezavo")
+        print("2 - Prikaži trge")
+        print("3 - Prikaži order book in spread")
+        print("4 - Spremljaj cene")
+        print("5 - Prikaži graf zgodovine")
+        print("6 - Oddaj limitno naročilo na testnetu")
+        print("7 - Preveri status naročila")
+        print("8 - Prekliči odprto naročilo")
         print("0 - Izhod")
 
         choice = input("Tvoja izbira: ").strip()
 
-        if choice == "1":
-            show_orderbook(market_id)
-
-        elif choice == "2":
-            live_module.monitor_market(
-                market_id=market_id,
-                get_orderbook=orderbook_module.get_orderbook,
-                calculate_spread=spread_module.calculate_spread,
-                interval=3,
-                limit=10
-            )
-
-        elif choice == "0":
-            print("Program se je zaključil.")
-
-        else:
-            print("Neveljavna izbira. Zaženi program in poskusi znova.")
-
-    except KeyboardInterrupt:
-        print()
-        print("Program je bil ustavljen.")
-
-    except Exception as error:
-        print("Prišlo je do napake:", error)
+        try:
+            if choice == "1":
+                connection_module.check_connection()
+            elif choice == "2":
+                for market in markets_module.get_markets():
+                    print(market["market_id"], market["symbol"], market.get("market_type", ""))
+            elif choice in ("3", "4"):
+                symbol = input("Vnesi simbol trga: ").strip().upper()
+                market = markets_module.find_market(symbol)
+                if market is None:
+                    print("Trg ni bil najden.")
+                elif choice == "3":
+                    show_orderbook(market)
+                else:
+                    quote_currency = markets_module.get_quote_currency(market)
+                    live_module.monitor_market(
+                        market["market_id"], orderbook_module.get_orderbook,
+                        spread_module.calculate_spread, quote_currency=quote_currency
+                    )
+            elif choice == "5":
+                import_module("07_plot_history").main()
+            elif choice == "6":
+                orders_module.submit_testnet_order()
+            elif choice == "7":
+                orders_module.check_order_status()
+            elif choice == "8":
+                orders_module.cancel_open_order()
+            elif choice == "0":
+                print("Program se je zaključil.")
+                return
+            else:
+                print("Neveljavna izbira.")
+        except KeyboardInterrupt:
+            print("\nOperacija je bila ustavljena.")
+        except Exception as error:
+            print("Prišlo je do napake:", error)
 
 
 if __name__ == "__main__":

@@ -97,7 +97,8 @@ def monitor_market(
     get_orderbook,
     calculate_spread,
     interval=3,
-    limit=10
+    limit=10,
+    quote_currency=None
 ):
     """Spremlja order book, prikazuje cene v EUR in shranjuje zgodovino."""
 
@@ -105,7 +106,7 @@ def monitor_market(
         while True:
             clear_screen()
 
-            print("=== LIGHTER | CENE V ŽIVO (EUR) ===")
+            print("=== LIGHTER | CENE V ŽIVO ===")
             print(f"Čas: {time.strftime('%H:%M:%S')}")
             print("-" * 40)
 
@@ -123,58 +124,36 @@ def monitor_market(
 
                 else:
                     result = calculate_spread(asks, bids)
-                    rate = currency_module.get_usd_to_eur_rate()
+                    print(f"Kotacijska valuta: {quote_currency or 'neznana'}")
 
-                    best_ask_eur = format_eur(
-                        result["best_ask"] * rate
-                    )
-
-                    best_bid_eur = format_eur(
-                        result["best_bid"] * rate
-                    )
-
-                    spread_eur = format_eur(
-                        (
-                            result["best_ask"]
-                            - result["best_bid"]
-                        ) * rate
-                    )
-
-                    # Shranimo uspešno meritev v CSV.
-                    try:
-                        save_price_history(
-                            market_id=market_id,
-                            result=result,
-                            rate=rate,
-                            best_bid_eur=best_bid_eur,
-                            best_ask_eur=best_ask_eur,
-                            spread_eur=spread_eur
+                    if quote_currency == "USD":
+                        rate = currency_module.get_usd_to_eur_rate()
+                        best_ask_eur = format_eur(result["best_ask"] * rate)
+                        best_bid_eur = format_eur(result["best_bid"] * rate)
+                        spread_eur = format_eur(
+                            (result["best_ask"] - result["best_bid"]) * rate
                         )
 
-                        print("Zgodovina: meritev shranjena v CSV.")
+                        try:
+                            save_price_history(
+                                market_id, result, rate,
+                                best_bid_eur, best_ask_eur, spread_eur
+                            )
+                            print("Zgodovina: meritev shranjena v CSV.")
+                        except (OSError, csv.Error) as error:
+                            print("Napaka pri shranjevanju zgodovine:", error)
 
-                    except (OSError, csv.Error) as error:
-                        print("Napaka pri shranjevanju zgodovine:")
-                        print(error)
+                        print(f"Menjalni tečaj: 1 USD = {rate:.6f} EUR")
+                        print(f"Najboljša prodajna: {best_ask_eur:.2f} EUR")
+                        print(f"Najboljša nakupna:  {best_bid_eur:.2f} EUR")
+                        print(f"Spread:             {spread_eur:.2f} EUR")
+                    else:
+                        print("EUR pretvorba in zapis zgodovine sta na voljo samo za USD trge.")
+                        print(f"Najboljša prodajna: {result['best_ask']} {quote_currency or ''}")
+                        print(f"Najboljša nakupna:  {result['best_bid']} {quote_currency or ''}")
+                        print(f"Spread:             {result['spread']} {quote_currency or ''}")
 
-                    print()
-                    print(f"Menjalni tečaj: 1 USD = {rate:.6f} EUR")
-                    print()
-
-                    print(
-                        f"Najboljša prodajna: {best_ask_eur:.2f} EUR"
-                    )
-
-                    print(
-                        f"Najboljša nakupna:  {best_bid_eur:.2f} EUR"
-                    )
-
-                    print(f"Spread:             {spread_eur:.2f} EUR")
-
-                    print(
-                        f"Spread (%):         "
-                        f"{result['spread_percent']:.6f}%"
-                    )
+                    print(f"Spread (%):         {result['spread_percent']:.6f}%")
 
             except Exception as error:
                 print("Napaka pri pridobivanju ali pretvorbi podatkov:")

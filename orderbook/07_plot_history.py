@@ -1,5 +1,6 @@
 
 import csv
+import math
 from pathlib import Path
 from datetime import datetime
 
@@ -79,13 +80,22 @@ def prepare_data(rows, market_id):
             continue
 
         try:
-            data.append((
-                datetime.fromisoformat(row["timestamp"]),
+            values = (
                 float(row["best_bid_eur"]),
                 float(row["best_ask_eur"]),
                 float(row["spread_eur"]),
-                float(row["spread_percent"])
-            ))
+                float(row["spread_percent"]),
+            )
+            if (
+                not all(math.isfinite(value) for value in values)
+                or values[0] <= 0
+                or values[1] <= 0
+                or values[2] < 0
+                or values[3] < 0
+            ):
+                continue
+
+            data.append((datetime.fromisoformat(row["timestamp"]), *values))
         except (KeyError, ValueError, TypeError):
             continue
 

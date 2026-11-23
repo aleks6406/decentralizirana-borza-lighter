@@ -10,6 +10,10 @@ venv/
 # Environment variables and secrets
 .env
 .env.*
+!.env.example
+*.pem
+*.key
+api_key_config.json
 
 # IDE
 .vscode/

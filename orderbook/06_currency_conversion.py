@@ -1,7 +1,7 @@
 
 import time
 import requests
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 
 API_URL = "https://open.er-api.com/v6/latest/USD"
@@ -35,18 +35,26 @@ def get_usd_to_eur_rate():
 
         data = response.json()
 
-        if data.get("result") != "success":
+        if not isinstance(data, dict) or data.get("result") != "success":
             raise RuntimeError(
                 "Vir menjalnih tečajev ni vrnil uspešnega odgovora."
             )
 
-        rate = data["rates"]["EUR"]
-        _cached_rate = Decimal(str(rate))
+        rates = data.get("rates")
+        if not isinstance(rates, dict) or "EUR" not in rates:
+            raise RuntimeError("Odgovor ne vsebuje menjalnega tečaja EUR.")
+
+        rate = rates["EUR"]
+        rate = Decimal(str(rate))
+        if not rate.is_finite() or rate <= 0:
+            raise RuntimeError("Vir je vrnil neveljaven menjalni tečaj.")
+
+        _cached_rate = rate
         _last_update = current_time
 
         return _cached_rate
 
-    except (requests.RequestException, KeyError, ValueError) as error:
+    except (requests.RequestException, KeyError, ValueError, TypeError, InvalidOperation) as error:
         raise RuntimeError(
             f"Menjalnega tečaja USD/EUR ni bilo mogoče pridobiti: {error}"
         ) from error
